@@ -1,11 +1,22 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Actividad Git por proyecto y mes</title>
-<style>body{font:16px/1.55 system-ui;margin:0;background:#f7f8f5;color:#182823} main{max-width:1300px;margin:auto;padding:clamp(1rem,4vw,3rem)} h1{font-size:clamp(2rem,5vw,3.8rem);line-height:1} label{display:inline-grid;gap:.3rem;margin:0 1rem 1rem 0} input,select{padding:.5rem;max-width:80vw;font:inherit} .table{overflow:auto;border:1px solid #b8cbc2} table{border-collapse:collapse;width:100%;background:#fff} th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid #e0eae5} th{background:#dcece4} button{font:inherit;padding:.4rem .75rem;margin:.75rem .5rem .5rem 0} .metric{font-size:1.25rem;color:#154f40}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem;margin:0 0 1rem} .kpis div{padding:.65rem;background:#e9f2ed;border:1px solid #c3d7ce;border-radius:8px} .kpis dd{margin:0;font-size:1.35rem;font-weight:700} .note{font-size:.92rem}</style>
+<style>body{font:16px/1.55 system-ui;margin:0;background:#f7f8f5;color:#182823} main{max-width:1300px;margin:auto;padding:clamp(1rem,4vw,3rem)} h1{font-size:clamp(2rem,5vw,3.8rem);line-height:1} label{display:inline-grid;gap:.3rem;margin:0 1rem 1rem 0} input,select{padding:.5rem;max-width:80vw;font:inherit} .table{overflow:auto;border:1px solid #b8cbc2} table{border-collapse:collapse;width:100%;background:#fff} th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid #e0eae5} th{background:#dcece4} button{font:inherit;padding:.4rem .75rem;margin:.75rem .5rem .5rem 0} .metric{font-size:1.25rem;color:#154f40}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem;margin:0 0 1rem} .kpis div{padding:.65rem;background:#e9f2ed;border:1px solid #c3d7ce;border-radius:8px} .kpis dd{margin:0;font-size:1.35rem;font-weight:700} .note{font-size:.92rem}
+#project-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:.25rem;max-height:18rem;overflow:auto;padding:.5rem}
+#project-options label{display:flex;align-items:center;gap:.4rem;margin:0;overflow-wrap:anywhere}
+#project-picker{margin:.6rem 0 1rem}
+#project-picker summary{cursor:pointer;font-weight:600}
+</style>
 <main><h1>Actividad Git por proyecto y mes</h1><p>Corte del inventario 18/11/2026 · Período 2025–2026 · Actividad visible de 2025-01 a 2026-11</p>
 <p class="metric"><strong>13,447 commits únicos</strong> · 2,297 merges · 119 repositorios con archivo de submódulos · 98 proyectos con actividad</p>
 <p>Se revisaron 575 repositorios. Se incluyeron los que tienen <code>.gitmodules</code> o <code>.gitmodule</code> en la raíz de al menos una rama visible.</p>
 <p>Cada fila cuenta SHA únicos dentro del proyecto. Un commit que aparece en varios proyectos figura en cada uno y una sola vez en el total global. Real de Catorce también incluye 257 SHA de desarrollo del relevamiento previo que están en el inventario global. Cuando varios repositorios tienen una asociación conocida con la misma instancia, se agrupan juntos. Los demás se muestran por nombre de repositorio. El historial puede incluir ramas de prueba, dependencias, forks y automatizaciones.</p>
 <p>Complejidad por volumen de cambios. Baja hasta 3 archivos y 50 líneas, media hasta 10 archivos y 300 líneas, alta por encima de esos límites. Se aplican 1,5, 4 y 8 horas equivalentes a los 7,253 commits directos con diferencias completas disponibles. Las horas efectivas y la instalación en Odoo quedan sin verificar. Los CSV adjuntos permiten consultar autor y asunto por commit.</p>
 <label>Proyecto o repositorio<input id="q" type="search" placeholder="Ej. Real de Catorce"></label><label>Mes<select id="month"><option value="">Todos</option></select></label><label>Agrupar por<select id="group"><option value="detail">Proyecto y mes</option><option value="project">Proyecto</option><option value="month">Mes</option></select></label>
+<details id="project-picker">
+<summary id="project-summary">Proyectos</summary>
+<button id="project-all" type="button">Seleccionar todos</button>
+<button id="project-none" type="button">Quitar selección</button>
+<div id="project-options" role="group" aria-label="Proyectos incluidos"></div>
+</details>
 <dl class="kpis" id="kpis"></dl>
 <p class="note">Los indicadores responden a los filtros. Si un commit pertenece a varios proyectos, se cuenta en cada uno. La cobertura se calcula sobre commits directos.</p>
 <p id="status" role="status"></p>
@@ -17,6 +28,50 @@ const previous=document.querySelector('#prev'), next=document.querySelector('#ne
 const grouping=document.querySelector('#group'), cards=document.querySelector('#kpis');
 const number=new Intl.NumberFormat('es-AR',{maximumFractionDigits:1});
 let page=0;
+const projects=[...new Set(data.map(row=>row[0]))].sort((a,b)=>a.localeCompare(b,'es'));
+const projectOptions=document.querySelector('#project-options');
+const projectSummary=document.querySelector('#project-summary');
+const selectionKey='informe-git-proyectos-2025-2026';
+let savedProjects;
+try { savedProjects=JSON.parse(localStorage.getItem(selectionKey)); } catch {}
+const selectedProjects=new Set(Array.isArray(savedProjects)
+  ? projects.filter(project=>savedProjects.includes(project)) : projects);
+const projectInputs=projects.map(project=>{
+ const label=document.createElement('label');
+ const input=document.createElement('input');
+ input.type='checkbox';
+ input.value=project;
+ input.checked=selectedProjects.has(project);
+ label.append(input,document.createTextNode(project));
+ projectOptions.append(label);
+ return input;
+});
+function updateProjectSummary(){
+ projectSummary.textContent='Proyectos seleccionados ('+selectedProjects.size+' de '+projects.length+')';
+}
+function applyProjectSelection(){
+ try { localStorage.setItem(selectionKey, JSON.stringify([...selectedProjects])); } catch {}
+ updateProjectSummary();
+ page=0;
+ render();
+}
+projectOptions.addEventListener('change',event=>{
+ const input=event.target;
+ if(input.checked) selectedProjects.add(input.value);
+ else selectedProjects.delete(input.value);
+ applyProjectSelection();
+});
+for(const [id,checked] of [['#project-all',true],['#project-none',false]]){
+ document.querySelector(id).onclick=()=>{
+   selectedProjects.clear();
+   for(const input of projectInputs){
+     input.checked=checked;
+     if(checked) selectedProjects.add(input.value);
+   }
+   applyProjectSelection();
+ };
+}
+updateProjectSummary();
 for(const value of [...new Set(data.map(row=>row[1]))]) month.add(new Option(value,value));
 const sum=(rows,index)=>rows.reduce((total,row)=>total+Number(row[index]),0);
 function aggregate(rows, mode){
@@ -35,7 +90,7 @@ function aggregate(rows, mode){
 }
 function render(){
  const term=q.value.trim().toLowerCase(), selected=month.value;
- const filtered=data.filter(row=>row[0].toLowerCase().includes(term)&&(!selected||row[1]===selected));
+ const filtered=data.filter(row=>selectedProjects.has(row[0])&&row[0].toLowerCase().includes(term)&&(!selected||row[1]===selected));
  const direct=sum(filtered,4), estimated=sum(filtered,9);
  const metrics=[
    ['Proyectos',new Set(filtered.map(row=>row[0])).size],
